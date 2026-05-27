@@ -120,7 +120,7 @@ if fnd_data and 'weatherForecast' in fnd_data:
             st.error("🚨 當前本港正受熱帶氣旋影響")
             st.subheader("短期掛波精準 Minute-Level 預測")
             next_check = (datetime.now() + timedelta(hours=1)).replace(minute=20, second=0)
-            st.metric(label="預計考慮改掛更高風球時間", value=f"{next_check.strftime('%H:%M')} 或 {next_check.replace(minute=40).strftime('%H('%M')}")
+            st.metric(label="預計考慮改掛更高風球時間", value=f"{next_check.strftime('%H:%M')} 或 {next_check.replace(minute=40).strftime('%H:%M')}")
             st.caption("備註：AI 模型已根據香港天文台於「每小時20分/40分」掛波之習慣進行時間權重修正。")
             t8_prob = 85
         else:
