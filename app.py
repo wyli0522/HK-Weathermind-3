@@ -42,25 +42,21 @@ if fnd_data and 'weatherForecast' in fnd_data:
     
 # 讀取天文台未來7天預報並進行微氣候修正
     for day in fnd_data['weatherForecast'][:7]:
-        date_str = day.get('forecastDate', '00000000')
+        date_str = str(day.get('forecastDate', '00000000'))
         
-        # 【終極保險防禦機制】
+        # 【精準解析天文台溫度結構】
+        # 天文台最新結構為: day['forecastMaxTemp']['value'] 或者是直接一個含有 value 的 dict
         try:
-            # 嘗試標準結構抓取
-            if 'forecastMaxTemp' in day and 'value' in day['forecastMaxTemp']:
-                base_max = float(day['forecastMaxTemp']['value'])
-            else:
-                base_max = float(day.get('forecastMaxTemp', 31.0))
+            max_obj = day.get('forecastMaxTemp', {})
+            base_max = float(max_obj.get('value', 31.0))
         except:
-            base_max = 31.0 # 5月底夏天的預設最高氣溫保底
+            base_max = 31.0
             
         try:
-            if 'forecastMinTemp' in day and 'value' in day['forecastMinTemp']:
-                base_min = float(day['forecastMinTemp']['value'])
-            else:
-                base_min = float(day.get('forecastMinTemp', 25.0))
+            min_obj = day.get('forecastMinTemp', {})
+            base_min = float(min_obj.get('value', 25.0))
         except:
-            base_min = 25.0 # 5月底夏天的預設最低氣溫保底
+            base_min = 25.0
         
         # 處理降雨概率 (PSR)
         psr = day.get('PSR', '中')
