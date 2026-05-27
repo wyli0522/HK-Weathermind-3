@@ -40,13 +40,27 @@ if fnd_data and 'weatherForecast' in fnd_data:
     locations = ["大圍", "沙田", "第一城", "馬鞍山", "九龍塘", "天文台總部"]
     m1_forecast = []
     
-    # 讀取天文台未來7天預報並進行微氣候修正
+# 讀取天文台未來7天預報並進行微氣候修正
     for day in fnd_data['weatherForecast'][:7]:
         date_str = day.get('forecastDate', '00000000')
         
-        # 【精準溫度抓取優化】直接提取數值
-        base_max = float(day['forecastMaxTemp']['value'])
-        base_min = float(day['forecastMinTemp']['value'])
+        # 【終極保險防禦機制】
+        try:
+            # 嘗試標準結構抓取
+            if 'forecastMaxTemp' in day and 'value' in day['forecastMaxTemp']:
+                base_max = float(day['forecastMaxTemp']['value'])
+            else:
+                base_max = float(day.get('forecastMaxTemp', 31.0))
+        except:
+            base_max = 31.0 # 5月底夏天的預設最高氣溫保底
+            
+        try:
+            if 'forecastMinTemp' in day and 'value' in day['forecastMinTemp']:
+                base_min = float(day['forecastMinTemp']['value'])
+            else:
+                base_min = float(day.get('forecastMinTemp', 25.0))
+        except:
+            base_min = 25.0 # 5月底夏天的預設最低氣溫保底
         
         # 處理降雨概率 (PSR)
         psr = day.get('PSR', '中')
@@ -56,7 +70,7 @@ if fnd_data and 'weatherForecast' in fnd_data:
         # 微氣候地形修正邏輯
         for loc in locations:
             if loc == "大圍":
-                max_t, min_t = base_max + 0.5, base_min - 0.2  # 盆地效應，日夜溫差稍大
+                max_t, min_t = base_max + 0.5, base_min - 0.2  # 盆地效應
             elif loc == "第一城":
                 max_t, min_t = base_max + 0.2, base_min - 0.1
             elif loc == "馬鞍山":
