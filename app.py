@@ -41,7 +41,7 @@ if temp_data and fnd_data:
             current_hko_temp = float(t['value'])
             break
 
-    # ------------------------------------------
+# ------------------------------------------
     # MODULE 1: 基礎與微氣候七日預報
     # ------------------------------------------
     st.header("📊 Module 1: 基礎與微氣候七日預報")
@@ -49,42 +49,46 @@ if temp_data and fnd_data:
     locations = ["大圍", "沙田", "第一城", "馬鞍山", "九龍塘", "天文台總部"]
     m1_forecast = []
     
-# 抓取天文台未來7天預報並進行微氣候修正 (Downscaling)
-for i, day in enumerate(fnd_data.get('weatherForecast', [])[:7]):
-    date_str = day.get('forecastDate', '00000000')
-    
-    # 安全提取最高氣溫，如果找不到就給個默認值 28.0
-    max_temp_obj = day.get('forecastMaxTemp')
-    base_max = float(max_temp_obj['value']) if max_temp_obj and 'value' in max_temp_obj else float(day.get('forecastMaxTemp', 28.0))
-    
-    # 安全提取最低氣溫，如果找不到就給個默認值 22.0
-    min_temp_obj = day.get('forecastMinTemp')
-    base_min = float(min_temp_obj['value']) if min_temp_obj and 'value' in min_temp_obj else float(day.get('forecastMinTemp', 22.0))
-    
-    psr = day.get('PSR', '中') # 降雨概率
-    
+    # 抓取天文台未來7天預報並進行微氣候修正 (Downscaling)
+    for i, day in enumerate(fnd_data.get('weatherForecast', [])[:7]):
+        date_str = day.get('forecastDate', '00000000')
         
-        # 轉換 PSR 文本為大致百分比
+        # 安全提取最高氣溫
+        max_temp_obj = day.get('forecastMaxTemp')
+        if isinstance(max_temp_obj, dict) and 'value' in max_temp_obj:
+            base_max = float(max_temp_obj['value'])
+        else:
+            base_max = float(day.get('forecastMaxTemp', 28.0))
+            
+        # 安全提取最低氣溫
+        min_temp_obj = day.get('forecastMinTemp')
+        if isinstance(min_temp_obj, dict) and 'value' in min_temp_obj:
+            base_min = float(min_temp_obj['value'])
+        else:
+            base_min = float(day.get('forecastMinTemp', 22.0))
+            
+        # 處理降雨概率 (PSR)
+        psr = day.get('PSR', '中')
         psr_map = {"低": "10%", "中低": "30%", "中": "50%", "中高": "70%", "高": "90%"}
         rain_prob = psr_map.get(psr, "50%")
         
         # 微氣候地形修正邏輯
         for loc in locations:
             if loc == "大圍":
-                max_t, min_t = base_max + 0.5, base_min - 0.2  # 盆地效應，日夜溫差稍大
+                max_t, min_t = base_max + 0.5, base_min - 0.2  # 盆地效應
             elif loc == "第一城":
                 max_t, min_t = base_max + 0.2, base_min - 0.1
             elif loc == "馬鞍山":
-                max_t, min_t = base_max - 0.3, base_min + 0.3  # 臨海，風大，溫差較溫和
+                max_t, min_t = base_max - 0.3, base_min + 0.3  # 臨海風大
             elif loc == "九龍塘":
-                max_t, min_t = base_max + 0.4, base_min + 0.5  # 城市熱島效應
+                max_t, min_t = base_max + 0.4, base_min + 0.5  # 城市熱島
             else:
                 max_t, min_t = base_max, base_min
                 
             m1_forecast.append({
                 "日期": f"{date_str[4:6]}/{date_str[6:8]}",
                 "地點": loc,
-                "天氣狀況": day['forecastWeather'],
+                "天氣狀況": day.get('forecastWeather', '未有數據'),
                 "最高氣溫 (°C)": round(max_t, 1),
                 "最低氣溫 (°C)": round(min_t, 1),
                 "降雨概率": rain_prob
