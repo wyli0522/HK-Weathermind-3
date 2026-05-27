@@ -200,4 +200,4 @@ if fnd_data and 'weatherForecast' in fnd_data:
     st.header("🏫 Module 5: 社會營運影響與「停課停工」決策預報")
     
     # 核心時間加權邏輯：若大雨/大風發生在清晨 05:30 - 07:30
-    now_time = datetime.now().
+    now_time = datetime.now().time()
