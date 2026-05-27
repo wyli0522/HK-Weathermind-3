@@ -7,56 +7,50 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="HK-WeatherMind AI 智能氣象與社會營運預報系統", layout="wide")
 
 # ==========================================
-# DATA FETCHING FUNCTION (自動獲取香港天文台數據)
+# DATA FETCHING FUNCTION (徹底拔除 Cache，抓取 100% 活數據)
 # ==========================================
-@st.cache_data(ttl=300) # 每 5 分鐘自動緩存更新
-def fetch_hko_data():
+def fetch_hko_data_live():
     try:
-        # 1. 現時天氣報告 (包含各區實時氣溫)
-        temp_res = requests.get("https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc").json()
-        # 2. 九天天氣預報
-        fnd_res = requests.get("https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=fnd&lang=tc").json()
-        # 3. 現時天氣警告摘要
-        warn_res = requests.get("https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc").json()
-        return temp_res, fnd_res, warn_res
+        # 強制加上時間戳，防止瀏覽器或雲端伺服器緩存舊數據
+        timestamp = int(datetime.now().timestamp())
+        fnd_url = f"https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=fnd&lang=tc&_={timestamp}"
+        warn_url = f"https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc&_={timestamp}"
+        
+        fnd_res = requests.get(fnd_url).json()
+        warn_res = requests.get(warn_url).json()
+        return fnd_res, warn_res
     except Exception as e:
-        return None, None, None
+        st.error(f"API 連接失敗: {e}")
+        return None, None
 
-temp_data, fnd_data, warn_data = fetch_hko_data()
+fnd_data, warn_data = fetch_hko_data_live()
 
 # ==========================================
-# SYSTEM CORE LOGIC (HK-WeatherMind AI 核心大腦)
+# SYSTEM CORE LOGIC
 # ==========================================
 st.title("🌐 HK-WeatherMind AI 系統")
-st.subheader(f"實時數據更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (每 5 分鐘自動刷新)")
+st.subheader(f"實時數據更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (已開啟強制實時刷新模式)")
 st.markdown("---")
 
 if fnd_data and 'weatherForecast' in fnd_data:
-    # ------------------------------------------
-    # MODULE 1: 基礎與微氣候七日預報
-    # ------------------------------------------
     st.header("📊 Module 1: 基礎與微氣候七日預報")
     
+    # ─── 終極偵錯工具 ───
+    # 這裡會直接列出天文台 API 回傳給我們的頭幾天原始最高溫度，看看是不是 API 本身給死數
+    raw_temps = [str(day.get('forecastMaxTemp', {}).get('value', '無')) for day in fnd_data['weatherForecast'][:4]]
+    st.info(f"🔍 偵錯監控點 ── 天文台 API 傳回的前四天原始最高氣溫分別是：{', '.join(raw_temps)} °C")
+    # ─────────────────────
+
     locations = ["大圍", "沙田", "第一城", "馬鞍山", "九龍塘", "天文台總部"]
     m1_forecast = []
     
-# 讀取天文台未來7天預報並進行微氣候修正
+    # 讀取天文台未來7天預報並進行微氣候修正
     for day in fnd_data['weatherForecast'][:7]:
         date_str = str(day.get('forecastDate', '00000000'))
         
-        # 【精準解析天文台溫度結構】
-        # 天文台最新結構為: day['forecastMaxTemp']['value'] 或者是直接一個含有 value 的 dict
-        try:
-            max_obj = day.get('forecastMaxTemp', {})
-            base_max = float(max_obj.get('value', 31.0))
-        except:
-            base_max = 31.0
-            
-        try:
-            min_obj = day.get('forecastMinTemp', {})
-            base_min = float(min_obj.get('value', 25.0))
-        except:
-            base_min = 25.0
+        # 嚴格提取天文台數值
+        base_max = float(day.get('forecastMaxTemp', {}).get('value', 31.0))
+        base_min = float(day.get('forecastMinTemp', {}).get('value', 25.0))
         
         # 處理降雨概率 (PSR)
         psr = day.get('PSR', '中')
@@ -66,13 +60,13 @@ if fnd_data and 'weatherForecast' in fnd_data:
         # 微氣候地形修正邏輯
         for loc in locations:
             if loc == "大圍":
-                max_t, min_t = base_max + 0.5, base_min - 0.2  # 盆地效應
+                max_t, min_t = base_max + 0.5, base_min - 0.2
             elif loc == "第一城":
                 max_t, min_t = base_max + 0.2, base_min - 0.1
             elif loc == "馬鞍山":
-                max_t, min_t = base_max - 0.3, base_min + 0.3  # 臨海風大
+                max_t, min_t = base_max - 0.3, base_min + 0.3
             elif loc == "九龍塘":
-                max_t, min_t = base_max + 0.4, base_min + 0.5  # 城市熱島
+                max_t, min_t = base_max + 0.4, base_min + 0.5
             else:
                 max_t, min_t = base_max, base_min
                 
@@ -95,7 +89,6 @@ if fnd_data and 'weatherForecast' in fnd_data:
     st.markdown("---")
     col1, col2 = st.columns(2)
     
-    # 判定目前是否有大雨趨勢 (從未來一兩天天氣特徵分析)
     today_weather = fnd_data['weatherForecast'][0].get('forecastWeather', '')
     is_raining = any(word in today_weather for word in ["雨", "雷", "驟雨"])
     
@@ -118,12 +111,8 @@ if fnd_data and 'weatherForecast' in fnd_data:
 
     with col2:
         st.header("🌀 Module 3: 颱風全週期路徑預測")
-        
-        # 【修復 AttributeError 核心邏輯】安全檢查 warn_data 是否有有效的警告
         has_typhoon_signal = False
         if isinstance(warn_data, dict):
-            # 天文台警告摘要 API 如果有生效警告，會將信號代碼作為 key 放在 dict 入面
-            # TC 代表 Tropical Cyclone (熱帶氣旋警告: WTC1, WTC3, WTC8 等)
             has_typhoon_signal = any('WTC' in key for key in warn_data.keys())
         
         if has_typhoon_signal:
@@ -131,7 +120,6 @@ if fnd_data and 'weatherForecast' in fnd_data:
             st.subheader("短期掛波精準 Minute-Level 預測")
             next_check = (datetime.now() + timedelta(hours=1)).replace(minute=20, second=0)
             st.metric(label="預計考慮改掛更高風球時間", value=f"{next_check.strftime('%H:%M')} 或 {next_check.replace(minute=40).strftime('%H:%M')}")
-            st.caption("備註：AI 模型已根據香港天文台於「每小時20分/40分」掛波之習慣進行時間權重修正。")
             t8_prob = 85
         else:
             st.info("ℹ️ 西北太平洋及南海當前無熱帶氣旋逼近香港 800km 範圍。")
@@ -145,40 +133,35 @@ if fnd_data and 'weatherForecast' in fnd_data:
     current_month = datetime.now().month
     if current_month in [11, 12, 1, 2, 3]:
         st.subheader("🥶 冬季模式已自動激活")
-        st.write("ℹ️ 大圍/沙田等新界平地體感溫度將比天文台總部低約 1-2°C；若前往大老山等高海拔地區，氣溫將因高度效應額外暴跌。")
+        st.write("ℹ️ 大圍/沙田等新界平地體感溫度將比天文台總部低約 1-2°C。")
     else:
         st.write(f"☀️ 當前月份為 {current_month} 月，非冬季，冷鋒追蹤模組已自動轉入休眠狀態。")
 
     # ------------------------------------------
-    # MODULE 5: 社會營運影響與決策預測（停課預報）
+    # MODULE 5: 社會營運影響與決策預測
     # ------------------------------------------
     st.markdown("---")
     st.header("🏫 Module 5: 社會營運影響與「停課停工」決策預報")
     
-    # 核心時間加權邏輯：若大雨/大風發生在清晨 05:30 - 07:30
     now_time = datetime.now().time()
     is_rush_hour = datetime.strptime("05:30", "%H:%M").time() <= now_time <= datetime.strptime("07:30", "%H:%M").time()
     
-    # 計算停課概率
     school_closure_prob = 0
     if red_rain_prob > 50 or t8_prob > 50:
         school_closure_prob = 80
         if is_rush_hour:
-            school_closure_prob += 15 # 清晨時段加權
+            school_closure_prob += 15
             
     school_closure_prob = min(school_closure_prob, 100)
     
     col_s1, col_s2, col_s3 = st.columns(3)
     with col_s1:
         st.metric(label="明日 幼稚園/小學/中學 停課機率", value=f"{school_closure_prob}%")
-        if school_closure_prob > 70:
-            st.error("⚠️ AI 建議：家長及學生請密切留意明早 06:00 前政府之宣佈。")
     with col_s2:
         extreme_case_prob = 90 if t8_prob > 80 else 10
         st.metric(label="勞工處發出「極端情況」停工機率", value=f"{extreme_case_prob}%")
     with col_s3:
         mtr_risk = "高風險 (露天段大圍至羅湖隨時停駛)" if t8_prob > 50 else "正常營運"
         st.metric(label="港鐵東鐵線營運風險", value=mtr_risk)
-
 else:
-    st.error("無法加載即時氣象數據，請確認香港天文台 API 運作正常。")
+    st.error("無法加載即時氣象數據。")
